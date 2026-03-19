@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>羅茱輔助器</title>
+  <link rel="icon" href="rjpq.png">
   <meta name="description" content="MapleStory Artale 羅密歐與茱麗葉 PQ 實驗室通道輔助工具，支援 4 人即時路徑同步。">
   <meta property="og:title" content="羅茱輔助器">
   <meta property="og:description" content="MapleStory Artale 羅密歐與茱麗葉 PQ 實驗室通道輔助工具，支援 4 人即時路徑同步。">
@@ -34,12 +35,41 @@
       <div v-if="!firebaseReady" class="text-sm text-red-400 bg-red-900/30 border border-red-800 rounded p-3">
         Firebase 設定未完成
       </div>
-      <div>
+
+      <!-- 模式切換 -->
+      <div class="flex rounded-lg overflow-hidden border border-slate-600">
+        <button @click="mode = 'create'" class="flex-1 py-2 text-sm font-semibold transition"
+          :class="mode === 'create' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-slate-200'">
+          建立房間
+        </button>
+        <button @click="mode = 'join'" class="flex-1 py-2 text-sm font-semibold transition"
+          :class="mode === 'join' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-slate-200'">
+          加入房間
+        </button>
+      </div>
+
+      <!-- 建立：可輸入房號，或隨機產生 -->
+      <div v-if="mode === 'create'">
+        <label class="text-sm text-slate-200 font-medium">房間號碼</label>
+        <div class="mt-1.5 flex items-center gap-2">
+          <input v-model="generatedRoom" type="text" placeholder="輸入或隨機產生" maxlength="10" inputmode="numeric"
+            class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-indigo-500" />
+          <button @click="regenRoom"
+            class="px-3 py-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-slate-300 transition"
+            title="隨機產生房號">
+            ↻
+          </button>
+        </div>
+      </div>
+
+      <!-- 加入：輸入房號 -->
+      <div v-if="mode === 'join'">
         <label class="text-sm text-slate-200 font-medium">房間號碼</label>
         <input v-model="inputRoom" @keyup.enter="focusName" ref="roomInput"
           type="text" placeholder="輸入數字房號" maxlength="10" inputmode="numeric"
           class="mt-1.5 w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-indigo-500" />
       </div>
+
       <div>
         <label class="text-sm text-slate-200 font-medium">暱稱</label>
         <input v-model="inputName" @keyup.enter="join" ref="nameInput"
@@ -47,23 +77,25 @@
           class="mt-1.5 w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-indigo-500" />
       </div>
       <div v-if="joinError" class="text-sm text-red-400 text-center">{{ joinError }}</div>
-      <button @click="join" :disabled="!firebaseReady"
+      <button @click="join" :disabled="!firebaseReady || joining"
         class="w-full py-3 rounded-lg font-bold text-base transition"
-        :class="firebaseReady ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-slate-700 text-slate-500 cursor-not-allowed'">
-        進入
+        :class="firebaseReady && !joining ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-slate-700 text-slate-500 cursor-not-allowed'">
+        {{ joining ? '確認中…' : mode === 'create' ? '建立並進入' : '加入' }}
       </button>
-      <div class="flex justify-center gap-4 text-xs text-slate-300">
+      <div class="flex justify-center gap-4 text-xs text-slate-400">
         <span class="flex items-center gap-1">
-          左鍵
+          左鍵 / 鍵盤 1–4
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
+          正確路徑
         </span>
         <span class="flex items-center gap-1">
           右鍵
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
+          死路
         </span>
       </div>
     </div>
@@ -101,7 +133,7 @@
 
         <!-- Row 3: My color picker -->
         <div class="flex items-center gap-2">
-<div class="flex gap-2 flex-wrap">
+          <div class="flex gap-2 flex-wrap">
             <button v-for="(c, i) in COLOR_PALETTE" :key="i" @click="changeColor(i)"
               class="w-6 h-6 rounded-full border-2 transition-transform"
               :class="[c.dot, myColor === i ? 'border-white scale-110' : 'border-transparent']">
@@ -132,6 +164,9 @@
             <button v-for="door in 4" :key="door"
               @click="handleLeft(floor, door)"
               @contextmenu.prevent="handleRight(floor, door)"
+              @touchstart.passive="startLongPress(floor, door)"
+              @touchend="cancelLongPress"
+              @touchmove="cancelLongPress"
               :disabled="floor > maxAccessibleFloor"
               class="cell-btn w-full h-full rounded border text-sm font-bold flex items-center justify-center relative overflow-hidden"
               :class="cellClass(floor, door)">
@@ -152,7 +187,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             正確路徑
           </span>
-          <span class="flex items-center gap-1">右鍵
+          <span class="flex items-center gap-1">右鍵 / 長按
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             死路
           </span>
@@ -182,19 +217,25 @@ const COLOR_PALETTE = [
 ];
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
-function sanitize(s) { return s.trim().toLowerCase().replace(/[.$#[\]/\s]/g, '-').slice(0, 40); }
 
 const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted } = Vue;
 
 createApp({
   setup() {
     const joined    = ref(false);
+    const mode      = ref('create');
     const inputRoom = ref('');
     const inputName = ref('');
     const joinError = ref('');
+    const joining   = ref(false);
     const firebaseReady = ref(FIREBASE_READY);
     const roomInput = ref(null);
     const nameInput = ref(null);
+
+    const generatedRoom = ref('');
+    function regenRoom() {
+      generatedRoom.value = Math.floor(1000 + Math.random() * 9000).toString();
+    }
 
     const roomId    = ref('');
     const myName    = ref('');
@@ -300,6 +341,7 @@ createApp({
 
     // ── Left click / keyboard ──
     async function handleLeft(floor, door) {
+      if (longPressFired) { longPressFired = false; return; }
       if (!db || floor > maxAccessibleFloor.value) return;
       const data = cellData(floor, door);
       if (data && data.pid !== playerId.value) return;
@@ -320,6 +362,20 @@ createApp({
 
       await floorRef.update(update);
       if (didMark && floor === activeFloor.value) advanceFloor();
+    }
+
+    // ── Long press: local dead mark (mobile) ──
+    let longPressTimer = null;
+    let longPressFired = false;
+    function startLongPress(floor, door) {
+      longPressFired = false;
+      longPressTimer = setTimeout(() => {
+        longPressFired = true;
+        handleRight(floor, door);
+      }, 500);
+    }
+    function cancelLongPress() {
+      clearTimeout(longPressTimer);
     }
 
     // ── Right click: local dead mark ──
@@ -359,12 +415,19 @@ createApp({
     // ── Join ──
     function focusName() { nameInput.value?.focus(); }
 
-    function join() {
-      const room = inputRoom.value.trim();
+    async function join() {
+      const room = mode.value === 'create' ? generatedRoom.value : inputRoom.value.trim();
       const name = inputName.value.trim();
-      if (!room) { joinError.value = '請輸入房間號碼'; return; }
+      if (!room) { joinError.value = '請輸入或產生房間號碼'; return; }
       if (!/^\d+$/.test(room)) { joinError.value = '房間號碼只能是數字'; return; }
       if (!name) { joinError.value = '請輸入暱稱'; return; }
+
+      joining.value = true;
+      const snap = await db.ref(`rooms/${room}/players`).once('value');
+      joining.value = false;
+      if (mode.value === 'join' && !snap.exists()) { joinError.value = '找不到該房間'; return; }
+      if (mode.value === 'create' && snap.exists()) { joinError.value = '房號已被使用，請換一個'; return; }
+
       joinError.value = '';
       roomId.value = room;
       myName.value = name;
@@ -372,7 +435,7 @@ createApp({
       joined.value = true;
     }
 
-    // ── 清理超過 7 天沒活動的廢棄房間 ──
+    // ── 清理超過 2 小時沒活動的廢棄房間 ──
     function cleanupOldRooms() {
       const cutoff = Date.now() - 2 * 60 * 60 * 1000; // 2 小時前
       db.ref('rooms').orderByChild('lastActivity').endAt(cutoff).once('value', snap => {
@@ -472,14 +535,15 @@ createApp({
     });
 
     return {
-      joined, inputRoom, inputName, joinError, firebaseReady,
+      joined, mode, inputRoom, inputName, joinError, joining, firebaseReady,
+      generatedRoom, regenRoom,
       roomInput, nameInput,
       roomId, playerId, myColor, COLOR_PALETTE,
       players, sortedPlayersList, grid, completions, localDead,
       resetCount, activeFloor, maxAccessibleFloor,
       badgeClass, playerScore, rankEmoji,
       cellData, isDead, cellClass,
-      handleLeft, handleRight, changeColor, confirmReset,
+      handleLeft, handleRight, startLongPress, cancelLongPress, changeColor, confirmReset,
       setActiveFloor, focusName, join,
     };
   }
