@@ -398,14 +398,13 @@ createApp({
         pRef.child('online').onDisconnect().set(false);
       });
 
-      // Listen: own player node — force kick if deleted
-      // wasRegistered guards against the initial null fire before pRef.set() completes
-      let wasRegistered = false;
-      const selfRef = db.ref(`rooms/${rid}/players/${pid}`);
-      const selfH = selfRef.on('value', snap => {
-        if (snap.val() !== null) {
-          wasRegistered = true;
-        } else if (wasRegistered && joined.value) {
+      // Listen: players — also detects kick (own entry deleted after being seen)
+      let seenSelf = false;
+      const plRef = db.ref(`rooms/${rid}/players`);
+      const plH = plRef.on('value', snap => {
+        const data = snap.val() || {};
+        if (data[pid]) seenSelf = true;
+        if (seenSelf && joined.value && !data[pid]) {
           listeners.forEach(fn => fn());
           listeners = [];
           Object.keys(players).forEach(k => delete players[k]);
@@ -416,14 +415,8 @@ createApp({
           activeFloor.value = 1;
           joined.value = false;
           joinError.value = '你已被移出房間';
+          return;
         }
-      });
-      listeners.push(() => selfRef.off('value', selfH));
-
-      // Listen: players
-      const plRef = db.ref(`rooms/${rid}/players`);
-      const plH = plRef.on('value', snap => {
-        const data = snap.val() || {};
         Object.keys(players).forEach(k => delete players[k]);
         Object.assign(players, data);
       });
