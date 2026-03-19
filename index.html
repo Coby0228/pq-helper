@@ -33,7 +33,7 @@
       <div>
         <label class="text-sm text-slate-200 font-medium">房間號碼</label>
         <input v-model="inputRoom" @keyup.enter="focusName" ref="roomInput"
-          type="text" placeholder="輸入房號"
+          type="text" placeholder="輸入數字房號" maxlength="10" inputmode="numeric"
           class="mt-1.5 w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-indigo-500" />
       </div>
       <div>
@@ -356,11 +356,14 @@ createApp({
     function focusName() { nameInput.value?.focus(); }
 
     function join() {
-      if (!inputRoom.value.trim()) { joinError.value = '請輸入房間號碼'; return; }
-      if (!inputName.value.trim()) { joinError.value = '請輸入暱稱'; return; }
+      const room = inputRoom.value.trim();
+      const name = inputName.value.trim();
+      if (!room) { joinError.value = '請輸入房間號碼'; return; }
+      if (!/^\d+$/.test(room)) { joinError.value = '房間號碼只能是數字'; return; }
+      if (!name) { joinError.value = '請輸入暱稱'; return; }
       joinError.value = '';
-      roomId.value = sanitize(inputRoom.value);
-      myName.value = inputName.value.trim();
+      roomId.value = room;
+      myName.value = name;
       setupFirebase();
       joined.value = true;
     }
