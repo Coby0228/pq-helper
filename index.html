@@ -399,9 +399,13 @@ createApp({
       });
 
       // Listen: own player node — force kick if deleted
+      // wasRegistered guards against the initial null fire before pRef.set() completes
+      let wasRegistered = false;
       const selfRef = db.ref(`rooms/${rid}/players/${pid}`);
       const selfH = selfRef.on('value', snap => {
-        if (joined.value && snap.val() === null) {
+        if (snap.val() !== null) {
+          wasRegistered = true;
+        } else if (wasRegistered && joined.value) {
           listeners.forEach(fn => fn());
           listeners = [];
           Object.keys(players).forEach(k => delete players[k]);
