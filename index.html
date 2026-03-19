@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>羅茱輔助器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="config.js"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    .cell-btn { transition: filter 0.1s; }
+    .cell-btn:not(:disabled):active { filter: brightness(0.75); }
+  </style>
+</head>
+<body class="bg-slate-900 text-gray-100 select-none">
+<div id="app">
+
+  <!-- ══════════════ JOIN SCREEN ══════════════ -->
+  <div v-if="!joined" class="flex items-center justify-center min-h-screen p-5">
+    <div class="bg-slate-800 rounded-2xl p-8 w-full max-w-sm border border-slate-700 space-y-5">
+      <h1 class="text-center font-bold text-indigo-400 text-3xl tracking-wide">羅茱輔助器</h1>
+      <div class="flex justify-center">
+        <span class="text-sm text-slate-300 border border-slate-400 rounded-full px-3 py-1 italic">
+          不敢放公會
+        </span>
+      </div>
+      <div v-if="!firebaseReady" class="text-sm text-red-400 bg-red-900/30 border border-red-800 rounded p-3">
+        ⚠️ 請先填入 config.js 的 Firebase 設定
+      </div>
+      <div>
+        <label class="text-sm text-slate-200 font-medium">房間號碼</label>
+        <input v-model="inputRoom" @keyup.enter="focusName" ref="roomInput"
+          type="text" placeholder="輸入房號"
+          class="mt-1.5 w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-indigo-500" />
+      </div>
+      <div>
+        <label class="text-sm text-slate-200 font-medium">暱稱</label>
+        <input v-model="inputName" @keyup.enter="join" ref="nameInput"
+          type="text" placeholder="輸入暱稱" maxlength="6"
+          class="mt-1.5 w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-indigo-500" />
+      </div>
+      <div v-if="joinError" class="text-sm text-red-400 text-center">{{ joinError }}</div>
+      <button @click="join" :disabled="!firebaseReady"
+        class="w-full py-3 rounded-lg font-bold text-base transition"
+        :class="firebaseReady ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-slate-700 text-slate-500 cursor-not-allowed'">
+        進入
+      </button>
+      <div class="flex justify-center gap-4 text-xs text-slate-300">
+        <span class="flex items-center gap-1">
+          左鍵
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </span>
+        <span class="flex items-center gap-1">
+          右鍵
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ GAME SCREEN ══════════════ -->
+  <div v-else class="flex justify-center bg-slate-900">
+    <div class="w-full max-w-sm flex flex-col" style="height:100dvh">
+
+      <!-- ── Settings Panel ── -->
+      <div class="bg-slate-800 border-b border-slate-700 px-3 pt-2.5 pb-2.5 space-y-2.5 shrink-0">
+
+        <!-- Row 1: Room + Game count + Reset -->
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-slate-400 font-mono flex-1">{{ roomId }}</span>
+          <span class="text-sm text-slate-300">第 {{ resetCount + 1 }} 場</span>
+          <button @click="confirmReset"
+            class="text-sm px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-slate-200 transition">
+            重置
+          </button>
+        </div>
+
+        <!-- Row 2: Players with rank + score -->
+        <div class="flex flex-wrap gap-2">
+          <div v-for="[id, p] in sortedPlayersList" :key="id"
+            class="flex items-center gap-1 text-sm px-2.5 py-0.5 rounded-full font-semibold"
+            :class="badgeClass(id)">
+            <span v-if="completions[id]">{{ rankEmoji(completions[id].rank) }}</span>
+            <span>{{ p.name }}</span>
+            <span class="opacity-60">{{ playerScore(id) }}/10</span>
+            <span v-if="id === playerId" class="opacity-50">✦</span>
+          </div>
+        </div>
+
+        <!-- Row 3: My color picker -->
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-slate-300 shrink-0">顏色</span>
+          <div class="flex gap-2 flex-wrap">
+            <button v-for="(c, i) in COLOR_PALETTE" :key="i" @click="changeColor(i)"
+              class="w-6 h-6 rounded-full border-2 transition-transform"
+              :class="[c.dot, myColor === i ? 'border-white scale-110' : 'border-transparent']">
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Grid: flex-col-reverse → L1 at bottom, L10 at top ── -->
+      <div class="flex-1 flex flex-col-reverse px-3 py-2 gap-1 min-h-0">
+        <div v-for="floor in 10" :key="floor"
+          class="flex items-center gap-1.5 flex-1 min-h-0 rounded-md transition-colors"
+          :class="floor === activeFloor ? 'bg-yellow-400/20 border-l-4 border-yellow-400' : 'border-l-4 border-transparent'">
+
+          <!-- Floor label -->
+          <button @click="setActiveFloor(floor)"
+            class="w-10 text-right text-sm shrink-0 rounded py-0.5 transition-colors"
+            :class="floor > maxAccessibleFloor
+              ? 'text-slate-600 cursor-not-allowed'
+              : floor === activeFloor
+                ? 'text-yellow-300 font-bold'
+                : 'text-slate-400 hover:text-slate-200'">
+            {{ floor === activeFloor ? '▶' : '' }}L{{ floor }}
+          </button>
+
+          <!-- 4 door buttons -->
+          <div class="grid grid-cols-4 gap-1 flex-1 h-full">
+            <button v-for="door in 4" :key="door"
+              @click="handleLeft(floor, door)"
+              @contextmenu.prevent="handleRight(floor, door)"
+              :disabled="floor > maxAccessibleFloor"
+              class="cell-btn w-full h-full rounded border text-sm font-bold flex items-center justify-center relative overflow-hidden"
+              :class="cellClass(floor, door)">
+              <span v-if="isDead(floor, door) && !cellData(floor, door)">❌</span>
+              <span v-else-if="cellData(floor, door)" class="px-0.5 text-center break-all leading-tight">
+                {{ cellData(floor, door).name }}
+              </span>
+              <span v-else class="text-slate-500">{{ door }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Footer ── -->
+      <div class="bg-slate-800 border-t border-slate-700 px-3 py-2 text-center text-sm text-slate-300 shrink-0">
+        <span class="flex items-center justify-center gap-4 flex-wrap">
+          <span class="flex items-center gap-1">左鍵 / 1–4
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            正確路徑
+          </span>
+          <span class="flex items-center gap-1">右鍵
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            死路
+          </span>
+        </span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+const firebaseConfig = window.FIREBASE_CONFIG || {};
+const FIREBASE_READY = !!firebaseConfig.databaseURL;
+if (FIREBASE_READY) firebase.initializeApp(firebaseConfig);
+const db = FIREBASE_READY ? firebase.database() : null;
+
+const COLOR_PALETTE = [
+  { dot: 'bg-green-500',  badge: 'bg-green-800 text-green-100',   cell: 'bg-green-700/80 border-green-500'   },
+  { dot: 'bg-blue-500',   badge: 'bg-blue-800 text-blue-100',     cell: 'bg-blue-700/80 border-blue-500'     },
+  { dot: 'bg-purple-500', badge: 'bg-purple-800 text-purple-100', cell: 'bg-purple-700/80 border-purple-500' },
+  { dot: 'bg-amber-500',  badge: 'bg-amber-800 text-amber-100',   cell: 'bg-amber-700/80 border-amber-500'   },
+  { dot: 'bg-red-500',    badge: 'bg-red-800 text-red-100',       cell: 'bg-red-700/80 border-red-500'       },
+  { dot: 'bg-pink-500',   badge: 'bg-pink-800 text-pink-100',     cell: 'bg-pink-700/80 border-pink-500'     },
+  { dot: 'bg-teal-500',   badge: 'bg-teal-800 text-teal-100',     cell: 'bg-teal-700/80 border-teal-500'     },
+  { dot: 'bg-orange-500', badge: 'bg-orange-800 text-orange-100', cell: 'bg-orange-700/80 border-orange-500' },
+];
+
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function sanitize(s) { return s.trim().toLowerCase().replace(/[.$#[\]/\s]/g, '-').slice(0, 40); }
+
+const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted } = Vue;
+
+createApp({
+  setup() {
+    const joined    = ref(false);
+    const inputRoom = ref('');
+    const inputName = ref('');
+    const joinError = ref('');
+    const firebaseReady = ref(FIREBASE_READY);
+    const roomInput = ref(null);
+    const nameInput = ref(null);
+
+    const roomId    = ref('');
+    const myName    = ref('');
+    const playerId  = ref(genId());
+    const myColor   = ref(0);
+
+    const players     = reactive({});
+    const grid        = reactive({});
+    const completions = reactive({});
+    const localDead   = reactive({});
+    const resetCount  = ref(0);
+    const activeFloor = ref(1);
+
+    let listeners = [];
+
+    // ── Max accessible floor (sequential unlock) ──
+    const maxAccessibleFloor = computed(() => {
+      for (let f = 1; f <= 10; f++) {
+        if (!myMarkOnFloor(f)) return f;
+      }
+      return 10;
+    });
+
+    // Keep activeFloor within accessible range
+    watch(maxAccessibleFloor, max => {
+      if (activeFloor.value > max) activeFloor.value = max;
+    });
+
+    // ── Ranking ──
+    const sortedPlayersList = computed(() =>
+      Object.entries(players).sort((a, b) => {
+        const ra = completions[a[0]]?.rank ?? 999;
+        const rb = completions[b[0]]?.rank ?? 999;
+        if (ra !== rb) return ra - rb;
+        return playerScore(b[0]) - playerScore(a[0]);
+      })
+    );
+
+    function playerScore(pid) {
+      let n = 0;
+      for (let f = 1; f <= 10; f++)
+        for (let d = 1; d <= 4; d++)
+          if (grid[f]?.[d]?.pid === pid) n++;
+      return n;
+    }
+
+    function rankEmoji(rank) {
+      return ['🥇', '🥈', '🥉', '4️⃣'][rank - 1] ?? `${rank}.`;
+    }
+
+    function badgeClass(pid) {
+      const ci = (players[pid]?.color ?? 0) % COLOR_PALETTE.length;
+      return COLOR_PALETTE[ci].badge;
+    }
+
+    // ── Completion detection ──
+    const myScore = computed(() => playerScore(playerId.value));
+
+    watch(myScore, async (score) => {
+      if (score < 10 || completions[playerId.value]) return;
+      // Record completion with rank
+      await db.ref(`rooms/${roomId.value}/completions`).transaction(data => {
+        if (data?.[playerId.value]) return; // already recorded
+        const rank = Object.keys(data || {}).length + 1;
+        return { ...(data || {}), [playerId.value]: { name: myName.value, rank, ts: Date.now() } };
+      });
+    });
+
+    // ── Cell helpers ──
+    function cellData(floor, door) { return grid[floor]?.[door] ?? null; }
+    function isDead(floor, door)   { return !!localDead[`${floor}-${door}`]; }
+
+    function cellClass(floor, door) {
+      const locked = floor > maxAccessibleFloor.value;
+      const data = cellData(floor, door);
+      if (data) {
+        const ci = (players[data.pid]?.color ?? 0) % COLOR_PALETTE.length;
+        const base = COLOR_PALETTE[ci].cell;
+        if (locked) return base + ' cursor-not-allowed opacity-75';
+        return base + (data.pid === playerId.value ? ' cursor-pointer' : ' cursor-default opacity-90');
+      }
+      if (locked) return 'bg-slate-800/30 border-slate-700/20 text-slate-700 cursor-not-allowed';
+      return 'bg-slate-700/50 border-slate-600 hover:bg-slate-700 cursor-pointer';
+    }
+
+    function myMarkOnFloor(floor) {
+      for (let d = 1; d <= 4; d++)
+        if (grid[floor]?.[d]?.pid === playerId.value) return true;
+      return false;
+    }
+
+    // ── Floor navigation ──
+    function setActiveFloor(floor) {
+      if (floor > maxAccessibleFloor.value) return;
+      activeFloor.value = floor;
+    }
+
+    function advanceFloor() {
+      for (let f = activeFloor.value + 1; f <= maxAccessibleFloor.value; f++) {
+        if (!myMarkOnFloor(f)) { activeFloor.value = f; return; }
+      }
+    }
+
+    // ── Left click / keyboard ──
+    async function handleLeft(floor, door) {
+      if (!db || floor > maxAccessibleFloor.value) return;
+      const data = cellData(floor, door);
+      if (data && data.pid !== playerId.value) return;
+
+      const floorRef = db.ref(`rooms/${roomId.value}/grid/${floor}`);
+      const snap = await floorRef.once('value');
+      const floorData = snap.val() || {};
+      const update = {};
+      let didMark = false;
+
+      for (let d = 1; d <= 4; d++)
+        if (floorData[d]?.pid === playerId.value) update[d] = null;
+
+      if (floorData[door]?.pid !== playerId.value) {
+        update[door] = { pid: playerId.value, name: myName.value };
+        didMark = true;
+      }
+
+      await floorRef.update(update);
+      if (didMark && floor === activeFloor.value) advanceFloor();
+    }
+
+    // ── Right click: local dead mark ──
+    function handleRight(floor, door) {
+      if (cellData(floor, door) || floor > maxAccessibleFloor.value) return;
+      const key = `${floor}-${door}`;
+      if (localDead[key]) delete localDead[key];
+      else localDead[key] = true;
+    }
+
+    // ── Color change ──
+    async function changeColor(i) {
+      myColor.value = i;
+      if (db && roomId.value)
+        db.ref(`rooms/${roomId.value}/players/${playerId.value}/color`).set(i);
+    }
+
+    // ── Reset (grid + completions, increment count, kick 0-score players) ──
+    async function confirmReset() {
+      if (!confirm('清空所有標記並開始新一場？')) return;
+      const updates = {
+        [`rooms/${roomId.value}/grid`]: null,
+        [`rooms/${roomId.value}/completions`]: null,
+        [`rooms/${roomId.value}/resetCount`]: firebase.database.ServerValue.increment(1),
+        [`rooms/${roomId.value}/lastActivity`]: Date.now(),
+      };
+      // 這場 0 分的玩家（自己除外）踢出房間
+      Object.keys(players).forEach(id => {
+        if (id !== playerId.value && playerScore(id) === 0)
+          updates[`rooms/${roomId.value}/players/${id}`] = null;
+      });
+      await db.ref().update(updates);
+      Object.keys(localDead).forEach(k => delete localDead[k]);
+      activeFloor.value = 1;
+    }
+
+    // ── Join ──
+    function focusName() { nameInput.value?.focus(); }
+
+    function join() {
+      if (!inputRoom.value.trim()) { joinError.value = '請輸入房間號碼'; return; }
+      if (!inputName.value.trim()) { joinError.value = '請輸入暱稱'; return; }
+      joinError.value = '';
+      roomId.value = sanitize(inputRoom.value);
+      myName.value = inputName.value.trim();
+      setupFirebase();
+      joined.value = true;
+    }
+
+    // ── 清理超過 7 天沒活動的廢棄房間 ──
+    function cleanupOldRooms() {
+      const cutoff = Date.now() - 2 * 60 * 60 * 1000; // 2 小時前
+      db.ref('rooms').orderByChild('lastActivity').endAt(cutoff).once('value', snap => {
+        const updates = {};
+        snap.forEach(child => { updates[child.key] = null; });
+        if (Object.keys(updates).length > 0)
+          db.ref('rooms').update(updates);
+      });
+    }
+
+    function setupFirebase() {
+      const rid = roomId.value;
+      const pid = playerId.value;
+
+      // 更新房間活動時間 + 清理舊房間
+      db.ref(`rooms/${rid}/lastActivity`).set(Date.now());
+      cleanupOldRooms();
+
+      // Auto-assign first unused color
+      db.ref(`rooms/${rid}/players`).once('value', snap => {
+        const existing = snap.val() || {};
+        const used = Object.values(existing).map(p => p.color ?? -1);
+        let color = myColor.value;
+        for (let i = 0; i < COLOR_PALETTE.length; i++) {
+          if (!used.includes(i)) { color = i; break; }
+        }
+        myColor.value = color;
+        const pRef = db.ref(`rooms/${rid}/players/${pid}`);
+        pRef.set({ name: myName.value, online: true, color });
+        pRef.child('online').onDisconnect().set(false);
+      });
+
+      // Listen: players
+      const plRef = db.ref(`rooms/${rid}/players`);
+      const plH = plRef.on('value', snap => {
+        const data = snap.val() || {};
+        Object.keys(players).forEach(k => delete players[k]);
+        Object.assign(players, data);
+      });
+      listeners.push(() => plRef.off('value', plH));
+
+      // Listen: grid
+      const gRef = db.ref(`rooms/${rid}/grid`);
+      const gH = gRef.on('value', snap => {
+        const data = snap.val() || {};
+        Object.keys(grid).forEach(k => delete grid[k]);
+        Object.assign(grid, data);
+      });
+      listeners.push(() => gRef.off('value', gH));
+
+      // Listen: completions
+      const cRef = db.ref(`rooms/${rid}/completions`);
+      const cH = cRef.on('value', snap => {
+        const data = snap.val() || {};
+        Object.keys(completions).forEach(k => delete completions[k]);
+        Object.assign(completions, data);
+      });
+      listeners.push(() => cRef.off('value', cH));
+
+      // Listen: resetCount
+      const rcRef = db.ref(`rooms/${rid}/resetCount`);
+      const rcH = rcRef.on('value', snap => { resetCount.value = snap.val() ?? 0; });
+      listeners.push(() => rcRef.off('value', rcH));
+    }
+
+    // ── Keyboard 1–4 ──
+    function handleKeydown(e) {
+      if (!joined.value) return;
+      if (document.activeElement?.tagName === 'INPUT') return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (['1', '2', '3', '4'].includes(e.key))
+        handleLeft(activeFloor.value, parseInt(e.key));
+    }
+
+    onMounted(() => {
+      roomInput.value?.focus();
+      window.addEventListener('keydown', handleKeydown);
+    });
+    onUnmounted(() => {
+      window.removeEventListener('keydown', handleKeydown);
+      listeners.forEach(fn => fn());
+    });
+
+    return {
+      joined, inputRoom, inputName, joinError, firebaseReady,
+      roomInput, nameInput,
+      roomId, playerId, myColor, COLOR_PALETTE,
+      players, sortedPlayersList, grid, completions, localDead,
+      resetCount, activeFloor, maxAccessibleFloor,
+      badgeClass, playerScore, rankEmoji,
+      cellData, isDead, cellClass,
+      handleLeft, handleRight, changeColor, confirmReset,
+      setActiveFloor, focusName, join,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
