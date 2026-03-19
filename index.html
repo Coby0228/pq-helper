@@ -24,7 +24,7 @@
       <h1 class="text-center font-bold text-indigo-400 text-3xl tracking-wide">羅茱輔助器</h1>
       <div class="flex justify-center">
         <span class="text-sm text-slate-300 border border-slate-400 rounded-full px-3 py-1 italic">
-          不敢放公會
+          亂做不敢放公會
         </span>
       </div>
       <div v-if="!firebaseReady" class="text-sm text-red-400 bg-red-900/30 border border-red-800 rounded p-3">
@@ -344,8 +344,10 @@ createApp({
       };
       // 這場 0 分的玩家（自己除外）踢出房間
       Object.keys(players).forEach(id => {
-        if (id !== playerId.value && playerScore(id) === 0)
+        if (id !== playerId.value && playerScore(id) === 0) {
           updates[`rooms/${roomId.value}/players/${id}`] = null;
+          updates[`rooms/${roomId.value}/kicked/${id}`] = true;
+        }
       });
       await db.ref().update(updates);
       Object.keys(localDead).forEach(k => delete localDead[k]);
@@ -398,25 +400,29 @@ createApp({
         pRef.child('online').onDisconnect().set(false);
       });
 
-      // Listen: players — also detects kick (own entry deleted after being seen)
-      let seenSelf = false;
+      // Listen: kicked — explicit signal, avoids race conditions
+      db.ref(`rooms/${rid}/kicked/${pid}`).remove(); // clear stale signal on rejoin
+      const kickRef = db.ref(`rooms/${rid}/kicked/${pid}`);
+      const kickH = kickRef.on('value', snap => {
+        if (!snap.val() || !joined.value) return;
+        db.ref(`rooms/${rid}/kicked/${pid}`).remove();
+        listeners.forEach(fn => fn());
+        listeners = [];
+        Object.keys(players).forEach(k => delete players[k]);
+        Object.keys(grid).forEach(k => delete grid[k]);
+        Object.keys(completions).forEach(k => delete completions[k]);
+        Object.keys(localDead).forEach(k => delete localDead[k]);
+        resetCount.value = 0;
+        activeFloor.value = 1;
+        joined.value = false;
+        joinError.value = '你已被移出房間';
+      });
+      listeners.push(() => kickRef.off('value', kickH));
+
+      // Listen: players
       const plRef = db.ref(`rooms/${rid}/players`);
       const plH = plRef.on('value', snap => {
         const data = snap.val() || {};
-        if (data[pid]) seenSelf = true;
-        if (seenSelf && joined.value && !data[pid]) {
-          listeners.forEach(fn => fn());
-          listeners = [];
-          Object.keys(players).forEach(k => delete players[k]);
-          Object.keys(grid).forEach(k => delete grid[k]);
-          Object.keys(completions).forEach(k => delete completions[k]);
-          Object.keys(localDead).forEach(k => delete localDead[k]);
-          resetCount.value = 0;
-          activeFloor.value = 1;
-          joined.value = false;
-          joinError.value = '你已被移出房間';
-          return;
-        }
         Object.keys(players).forEach(k => delete players[k]);
         Object.assign(players, data);
       });
