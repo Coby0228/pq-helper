@@ -437,24 +437,12 @@ createApp({
       joined.value = true;
     }
 
-    // ── 清理超過 2 小時沒活動的廢棄房間 ──
-    function cleanupOldRooms() {
-      const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 24 小時前
-      db.ref('rooms').orderByChild('lastActivity').endAt(cutoff).once('value', snap => {
-        const updates = {};
-        snap.forEach(child => { updates[child.key] = null; });
-        if (Object.keys(updates).length > 0)
-          db.ref('rooms').update(updates);
-      });
-    }
-
     function setupFirebase() {
       const rid = roomId.value;
       const pid = playerId.value;
 
-      // 更新房間活動時間 + 清理舊房間
+      // 更新房間活動時間
       db.ref(`rooms/${rid}/lastActivity`).set(Date.now());
-      cleanupOldRooms();
 
       // Auto-assign first unused color
       db.ref(`rooms/${rid}/players`).once('value', snap => {
