@@ -2,7 +2,7 @@ const https = require('https');
 
 const DB_URL = 'https://pq-helper-default-rtdb.asia-southeast1.firebasedatabase.app';
 const SECRET = process.env.FIREBASE_SERVICE_ACCOUNT;
-const CUTOFF = Date.now() - 24 * 60 * 60 * 1000; // 24 小時前
+const CUTOFF = Date.now() - 2 * 60 * 60 * 1000; // 2 小時前
 
 function request(method, path, body) {
   return new Promise((resolve, reject) => {
@@ -30,7 +30,9 @@ async function main() {
 
   const toDelete = {};
   for (const [id, room] of Object.entries(rooms)) {
-    if (!room.lastActivity || room.lastActivity < CUTOFF)
+    const noActivity = !room.lastActivity || room.lastActivity < CUTOFF;
+    const anyOnline = Object.values(room.players || {}).some(p => p.online === true);
+    if (noActivity && !anyOnline)
       toDelete[id] = null;
   }
 
