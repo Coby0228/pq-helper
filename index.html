@@ -306,7 +306,11 @@ createApp({
     });
 
     // ── Cell helpers ──
-    function cellData(floor, door) { return grid[floor]?.[door] ?? null; }
+    function cellData(floor, door) {
+      const d = grid[floor]?.[door] ?? null;
+      if (d && !players[d.pid]) return null;
+      return d;
+    }
     function isDead(floor, door)   { return !!localDead[`${floor}-${door}`]; }
 
     function cellClass(floor, door) {
