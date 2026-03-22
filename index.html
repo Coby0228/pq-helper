@@ -430,7 +430,7 @@ createApp({
       joining.value = false;
       if (mode.value === 'join' && !snap.exists()) { joinError.value = '找不到該房間'; return; }
       if (mode.value === 'create' && snap.exists()) { joinError.value = '房號已被使用，請換一個'; return; }
-      if (mode.value === 'join' && snap.exists() && Object.values(snap.val()).filter(p => p.online).length >= 4) { joinError.value = '房間已滿（最多 4 人）'; return; }
+      if (mode.value === 'join' && snap.exists() && Object.keys(snap.val()).length >= 4) { joinError.value = '房間已滿（最多 4 人）'; return; }
 
       joinError.value = '';
       roomId.value = room;
@@ -456,8 +456,8 @@ createApp({
         }
         myColor.value = color;
         const pRef = db.ref(`rooms/${rid}/players/${pid}`);
-        pRef.set({ name: myName.value, color, online: true });
-        pRef.onDisconnect().update({ online: false });
+        pRef.set({ name: myName.value, color });
+        pRef.onDisconnect().remove();
       });
 
       // Listen: players — also detects kick (own entry deleted after being seen)
@@ -479,20 +479,7 @@ createApp({
           joinError.value = '你已被移出房間';
           return;
         }
-        // 清除離線玩家的 grid 標記（首次載入 or 剛離線）
-        const isFirstLoad = Object.keys(players).length === 0;
-        const justOffline = Object.entries(data)
-          .filter(([id, p]) => !p.online && (isFirstLoad || players[id]?.online))
-          .map(([id]) => id);
-        if (justOffline.length > 0) {
-          const updates = {};
-          for (let f = 1; f <= 10; f++)
-            for (let d = 1; d <= 4; d++)
-              if (justOffline.includes(grid[f]?.[d]?.pid)) updates[`rooms/${rid}/grid/${f}/${d}`] = null;
-          if (Object.keys(updates).length > 0) db.ref().update(updates);
-        }
-
-        Object.keys(players).forEach(k => delete players[k]);
+Object.keys(players).forEach(k => delete players[k]);
         Object.assign(players, data);
       });
       listeners.push(() => plRef.off('value', plH));
