@@ -430,7 +430,7 @@ createApp({
       joining.value = false;
       if (mode.value === 'join' && !snap.exists()) { joinError.value = '找不到該房間'; return; }
       if (mode.value === 'create' && snap.exists()) { joinError.value = '房號已被使用，請換一個'; return; }
-      if (mode.value === 'join' && snap.exists() && Object.keys(snap.val()).length >= 4) { joinError.value = '房間已滿（最多 4 人）'; return; }
+      if (mode.value === 'join' && snap.exists() && Object.values(snap.val()).filter(p => p.online).length >= 4) { joinError.value = '房間已滿（最多 4 人）'; return; }
 
       joinError.value = '';
       roomId.value = room;
@@ -446,17 +446,42 @@ createApp({
       // 更新房間活動時間
       db.ref(`rooms/${rid}/lastActivity`).set(Date.now());
 
-      // Auto-assign first unused color
-      db.ref(`rooms/${rid}/players`).once('value', snap => {
-        const existing = snap.val() || {};
-        const used = Object.values(existing).map(p => p.color ?? -1);
+      // 清除離線玩家的資料，再加入
+      db.ref(`rooms/${rid}`).once('value', snap => {
+        const room = snap.val() || {};
+        const existing = room.players || {};
+        const offlineIds = Object.entries(existing)
+          .filter(([, p]) => !p.online)
+          .map(([id]) => id);
+
+        const updates = {};
+        offlineIds.forEach(id => {
+          updates[`players/${id}`] = null;
+        });
+
+        // 清除離線玩家在 grid 上的標記
+        const grid = room.grid || {};
+        for (const floor of Object.keys(grid)) {
+          for (const door of Object.keys(grid[floor])) {
+            if (offlineIds.includes(grid[floor][door]?.pid))
+              updates[`grid/${floor}/${door}`] = null;
+          }
+        }
+
+        // Auto-assign first unused color
+        const onlinePlayers = Object.fromEntries(
+          Object.entries(existing).filter(([id]) => !offlineIds.includes(id))
+        );
+        const used = Object.values(onlinePlayers).map(p => p.color ?? -1);
         let color = myColor.value;
         for (let i = 0; i < COLOR_PALETTE.length; i++) {
           if (!used.includes(i)) { color = i; break; }
         }
         myColor.value = color;
+        updates[`players/${pid}`] = { name: myName.value, online: true, color };
+
+        db.ref(`rooms/${rid}`).update(updates);
         const pRef = db.ref(`rooms/${rid}/players/${pid}`);
-        pRef.set({ name: myName.value, online: true, color });
         pRef.child('online').onDisconnect().set(false);
       });
 
