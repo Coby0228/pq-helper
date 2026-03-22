@@ -479,9 +479,10 @@ createApp({
           joinError.value = '你已被移出房間';
           return;
         }
-        // 清除剛離線玩家的 grid 標記
+        // 清除離線玩家的 grid 標記（首次載入 or 剛離線）
+        const isFirstLoad = Object.keys(players).length === 0;
         const justOffline = Object.entries(data)
-          .filter(([id, p]) => !p.online && players[id]?.online)
+          .filter(([id, p]) => !p.online && (isFirstLoad || players[id]?.online))
           .map(([id]) => id);
         if (justOffline.length > 0) {
           const updates = {};
