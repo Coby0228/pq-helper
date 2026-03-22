@@ -118,9 +118,6 @@
             :class="myScore > 0 ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-slate-800 text-slate-600 cursor-not-allowed'">
             重置
           </button>
-          <button @click="leaveRoom" class="text-sm px-3 py-1 rounded bg-slate-700 hover:bg-red-800 text-slate-300 hover:text-white transition">
-            離開
-          </button>
         </div>
 
         <!-- Row 2: Players with rank + score -->
@@ -398,34 +395,6 @@ createApp({
         db.ref(`rooms/${roomId.value}/players/${playerId.value}/color`).set(i);
     }
 
-    // ── Leave room ──
-    async function leaveRoom() {
-      if (!db || !roomId.value) return;
-      const rid = roomId.value;
-      const pid = playerId.value;
-
-      // 取消 onDisconnect，避免重複執行
-      await db.ref(`rooms/${rid}/players/${pid}`).onDisconnect().cancel();
-
-      // 移除自己的 player 和 grid 標記
-      const updates = { [`rooms/${rid}/players/${pid}`]: null };
-      for (let f = 1; f <= 10; f++)
-        for (let d = 1; d <= 4; d++)
-          if (grid[f]?.[d]?.pid === pid) updates[`rooms/${rid}/grid/${f}/${d}`] = null;
-      await db.ref().update(updates);
-
-      // 回到加入畫面
-      listeners.forEach(fn => fn());
-      listeners = [];
-      Object.keys(players).forEach(k => delete players[k]);
-      Object.keys(grid).forEach(k => delete grid[k]);
-      Object.keys(completions).forEach(k => delete completions[k]);
-      Object.keys(localDead).forEach(k => delete localDead[k]);
-      resetCount.value = 0;
-      activeFloor.value = 1;
-      joined.value = false;
-    }
-
     // ── Reset (grid + completions, increment count, kick 0-score players) ──
     async function confirmReset() {
       if (myScore.value === 0) return;
@@ -510,6 +479,16 @@ createApp({
           joinError.value = '你已被移出房間';
           return;
         }
+        // 清除已離開玩家的 grid 標記
+        const gone = Object.keys(players).filter(id => !data[id]);
+        if (gone.length > 0) {
+          const updates = {};
+          for (let f = 1; f <= 10; f++)
+            for (let d = 1; d <= 4; d++)
+              if (gone.includes(grid[f]?.[d]?.pid)) updates[`rooms/${rid}/grid/${f}/${d}`] = null;
+          if (Object.keys(updates).length > 0) db.ref().update(updates);
+        }
+
         Object.keys(players).forEach(k => delete players[k]);
         Object.assign(players, data);
       });
@@ -566,7 +545,7 @@ createApp({
       resetCount, activeFloor, maxAccessibleFloor,
       badgeClass, playerScore, rankEmoji,
       cellData, isDead, cellClass,
-      handleLeft, handleRight, startLongPress, cancelLongPress, changeColor, confirmReset, leaveRoom,
+      handleLeft, handleRight, startLongPress, cancelLongPress, changeColor, confirmReset,
       setActiveFloor, focusName, join,
     };
   }
