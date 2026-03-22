@@ -450,6 +450,10 @@ createApp({
       // 更新房間活動時間
       db.ref(`rooms/${rid}/lastActivity`).set(Date.now());
 
+      // 先登記 onDisconnect，確保關閉分頁時一定會執行
+      const pRef = db.ref(`rooms/${rid}/players/${pid}`);
+      pRef.onDisconnect().remove();
+
       // Auto-assign first unused color，加入房間
       db.ref(`rooms/${rid}/players`).once('value', snap => {
         const existing = snap.val() || {};
@@ -459,9 +463,7 @@ createApp({
           if (!used.includes(i)) { color = i; break; }
         }
         myColor.value = color;
-        const pRef = db.ref(`rooms/${rid}/players/${pid}`);
         pRef.set({ name: myName.value, color });
-        pRef.onDisconnect().remove();
       });
 
       // Listen: players — also detects kick (own entry deleted after being seen)
