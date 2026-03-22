@@ -151,13 +151,13 @@
 
           <!-- Floor label -->
           <button @click="setActiveFloor(floor)"
-            class="w-10 text-right text-sm shrink-0 rounded py-0.5 transition-colors"
+            class="w-10 text-right text-base shrink-0 rounded py-0.5 transition-colors"
             :class="floor > maxAccessibleFloor
               ? 'text-slate-600 cursor-not-allowed'
               : floor === activeFloor
                 ? 'text-yellow-300 font-bold'
                 : 'text-slate-400 hover:text-slate-200'">
-            {{ floor === activeFloor ? '▶' : '' }}L{{ floor }}
+            L{{ floor }}
           </button>
 
           <!-- 4 door buttons -->
