@@ -377,6 +377,7 @@ createApp({
     }
     function cancelLongPress() {
       clearTimeout(longPressTimer);
+      setTimeout(() => { longPressFired = false; }, 300);
     }
 
     // ── Right click: local dead mark ──
