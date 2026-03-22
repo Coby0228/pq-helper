@@ -430,6 +430,7 @@ createApp({
       joining.value = false;
       if (mode.value === 'join' && !snap.exists()) { joinError.value = '找不到該房間'; return; }
       if (mode.value === 'create' && snap.exists()) { joinError.value = '房號已被使用，請換一個'; return; }
+      if (mode.value === 'join' && snap.exists() && Object.keys(snap.val()).length >= 4) { joinError.value = '房間已滿（最多 4 人）'; return; }
 
       joinError.value = '';
       roomId.value = room;
