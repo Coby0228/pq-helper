@@ -30,9 +30,9 @@ async function main() {
 
   const toDelete = {};
   for (const [id, room] of Object.entries(rooms)) {
-    const noActivity = !room.lastActivity || room.lastActivity < CUTOFF;
     const hasPlayers = Object.keys(room.players || {}).length > 0;
-    if (noActivity && !hasPlayers)
+    const stale = !room.lastActivity || room.lastActivity < CUTOFF;
+    if (!hasPlayers || stale)
       toDelete[id] = null;
   }
 
