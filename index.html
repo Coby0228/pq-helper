@@ -48,26 +48,19 @@
         </button>
       </div>
 
-      <!-- 建立：可輸入房號，或隨機產生 -->
-      <div v-if="mode === 'create'">
+      <!-- 房間號碼（建立/加入共用） -->
+      <div>
         <label class="text-sm text-slate-200 font-medium">房間號碼</label>
         <div class="mt-1.5 flex items-center gap-2">
-          <input v-model="generatedRoom" type="text" placeholder="輸入或隨機產生" maxlength="10" inputmode="numeric"
+          <input v-model="roomNumber" @keyup.enter="focusName" ref="roomInput"
+            type="text" :placeholder="mode === 'create' ? '輸入或隨機產生' : '輸入數字房號'" maxlength="10" inputmode="numeric"
             class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-indigo-500" />
-          <button @click="regenRoom"
+          <button v-if="mode === 'create'" @click="regenRoom"
             class="px-3 py-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-slate-300 transition"
             title="隨機產生房號">
             ↻
           </button>
         </div>
-      </div>
-
-      <!-- 加入：輸入房號 -->
-      <div v-if="mode === 'join'">
-        <label class="text-sm text-slate-200 font-medium">房間號碼</label>
-        <input v-model="inputRoom" @keyup.enter="focusName" ref="roomInput"
-          type="text" placeholder="輸入數字房號" maxlength="10" inputmode="numeric"
-          class="mt-1.5 w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-indigo-500" />
       </div>
 
       <div>
@@ -232,7 +225,7 @@ createApp({
   setup() {
     const joined    = ref(false);
     const mode      = ref('create');
-    const inputRoom = ref('');
+    const roomNumber = ref('');
     const inputName = ref('');
     const joinError = ref('');
     const joining   = ref(false);
@@ -240,9 +233,8 @@ createApp({
     const roomInput = ref(null);
     const nameInput = ref(null);
 
-    const generatedRoom = ref('');
     function regenRoom() {
-      generatedRoom.value = Math.floor(1000 + Math.random() * 9000).toString();
+      roomNumber.value = Math.floor(1000 + Math.random() * 9000).toString();
     }
 
     const roomId    = ref('');
@@ -430,7 +422,7 @@ createApp({
     function focusName() { nameInput.value?.focus(); }
 
     async function join() {
-      const room = mode.value === 'create' ? generatedRoom.value : inputRoom.value.trim();
+      const room = roomNumber.value.trim();
       const name = inputName.value.trim();
       if (!room) { joinError.value = '請輸入或產生房間號碼'; return; }
       if (!/^\d+$/.test(room)) { joinError.value = '房間號碼只能是數字'; return; }
@@ -482,6 +474,7 @@ createApp({
         const data = snap.val() || {};
         if (data[pid]) seenSelf = true;
         if (seenSelf && joined.value && data[pid]?.kicked) {
+          pRef.remove();
           listeners.forEach(fn => fn());
           listeners = [];
           Object.keys(players).forEach(k => delete players[k]);
@@ -552,8 +545,8 @@ createApp({
     });
 
     return {
-      joined, mode, inputRoom, inputName, joinError, joining, firebaseReady,
-      generatedRoom, regenRoom,
+      joined, mode, roomNumber, inputName, joinError, joining, firebaseReady,
+      regenRoom,
       roomInput, nameInput,
       roomId, playerId, myColor, myScore, COLOR_PALETTE,
       players, sortedPlayersList, grid, completions, localDead,
