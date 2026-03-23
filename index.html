@@ -401,6 +401,7 @@ createApp({
     // ── Reset (grid + completions, increment count, kick 0-score players) ──
     async function confirmReset() {
       if (myScore.value === 0) return;
+      await new Promise(r => setTimeout(r, 50));
       if (!confirm('清空所有標記並開始新一場？')) return;
       const updates = {
         [`rooms/${roomId.value}/grid`]: null,
