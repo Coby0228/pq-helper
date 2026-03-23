@@ -99,6 +99,13 @@
         </span>
       </div>
     </div>
+
+    <!-- 更新日誌 -->
+    <div class="mt-4 w-full max-w-sm text-xs text-slate-500 space-y-1 px-1">
+      <div class="text-slate-600 font-semibold uppercase tracking-widest text-[10px]">更新日誌</div>
+      <div><span class="text-slate-500">·</span> 房間上限 <span class="text-slate-300">4 人</span>，滿員無法加入</div>
+      <div><span class="text-slate-500">·</span> 重置時可將本場 <span class="text-slate-300">0 分玩家</span>移出房間</div>
+    </div>
   </div>
 
   <!-- ══════════════ GAME SCREEN ══════════════ -->
@@ -411,7 +418,7 @@ createApp({
       };
       // 這場 0 分的在線玩家（自己除外）踢出房間
       Object.entries(players).forEach(([id, p]) => {
-        if (id !== playerId.value && p.online && playerScore(id) === 0)
+        if (id !== playerId.value && playerScore(id) === 0)
           updates[`rooms/${roomId.value}/players/${id}/kicked`] = true;
       });
       await db.ref().update(updates);
@@ -430,11 +437,13 @@ createApp({
       if (!name) { joinError.value = '請輸入暱稱'; return; }
 
       joining.value = true;
-      const snap = await db.ref(`rooms/${room}/players`).once('value');
+      const snap = await db.ref(`rooms/${room}`).once('value');
       joining.value = false;
+      const roomData = snap.val();
+      const playerCount = Object.keys(roomData?.players || {}).length;
       if (mode.value === 'join' && !snap.exists()) { joinError.value = '找不到該房間'; return; }
       if (mode.value === 'create' && snap.exists()) { joinError.value = '房號已被使用，請換一個'; return; }
-      if (mode.value === 'join' && snap.exists() && Object.keys(snap.val()).length >= 4) { joinError.value = '房間已滿（最多 4 人）'; return; }
+      if (mode.value === 'join' && playerCount >= 4) { joinError.value = '房間已滿（最多 4 人）'; return; }
 
       joinError.value = '';
       roomId.value = room;

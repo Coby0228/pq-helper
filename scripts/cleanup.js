@@ -31,8 +31,8 @@ async function main() {
   const toDelete = {};
   for (const [id, room] of Object.entries(rooms)) {
     const noActivity = !room.lastActivity || room.lastActivity < CUTOFF;
-    const anyOnline = Object.values(room.players || {}).some(p => p.online === true);
-    if (noActivity && !anyOnline)
+    const hasPlayers = Object.keys(room.players || {}).length > 0;
+    if (noActivity && !hasPlayers)
       toDelete[id] = null;
   }
 
