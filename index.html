@@ -543,12 +543,29 @@ createApp({
         handleLeft(activeFloor.value, parseInt(e.key));
     }
 
+    // ── Idle disconnect ──
+    const IDLE_MS = 10 * 60 * 1000; // 10 分鐘
+    let idleTimer = null;
+    function resetIdle() {
+      if (db) db.goOnline();
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => { if (db) db.goOffline(); }, IDLE_MS);
+    }
+
     onMounted(() => {
       roomInput.value?.focus();
       window.addEventListener('keydown', handleKeydown);
+      ['mousemove', 'keydown', 'touchstart', 'click'].forEach(e =>
+        window.addEventListener(e, resetIdle, { passive: true })
+      );
+      resetIdle();
     });
     onUnmounted(() => {
       window.removeEventListener('keydown', handleKeydown);
+      ['mousemove', 'keydown', 'touchstart', 'click'].forEach(e =>
+        window.removeEventListener(e, resetIdle)
+      );
+      clearTimeout(idleTimer);
       listeners.forEach(fn => fn());
     });
 
