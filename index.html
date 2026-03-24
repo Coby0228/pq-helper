@@ -98,6 +98,7 @@
       <div class="text-xs text-slate-500 font-semibold uppercase tracking-widest">更新日誌</div>
       <div class="text-sm text-slate-400">· 房間上限 <span class="text-slate-200 font-semibold">4 人</span>，滿員無法加入</div>
       <div class="text-sm text-slate-400">· 重置時可將本場 <span class="text-slate-200 font-semibold">0 分玩家</span>移出房間</div>
+      <div class="text-sm text-slate-400">· 閒置 <span class="text-slate-200 font-semibold">30 分鐘</span>將自動離開房間</div>
     </div>
   </div>
 
@@ -544,7 +545,12 @@ createApp({
     }
 
     // ── Idle disconnect ──
-    const IDLE_MS = 10 * 60 * 1000; // 10 分鐘
+    // 玩家離開房間的三種機制：
+    //   1. 關閉分頁 / 網路中斷：onDisconnect().remove() 由 Firebase 伺服器端觸發，立即移除玩家節點
+    //   2. 閒置 30 分鐘：偵測 mousemove / keydown / touchstart / click，超時後呼叫 db.goOffline()，
+    //      觸發 onDisconnect，等同於斷線；有操作時呼叫 db.goOnline() 重新連線
+    //   3. 重置被踢：房主重置時，0 分的其他玩家會被標記 kicked，本機偵測到後自行呼叫 pRef.remove()
+    const IDLE_MS = 30 * 60 * 1000; // 30 分鐘
     let idleTimer = null;
     function resetIdle() {
       if (db) db.goOnline();
